@@ -579,6 +579,65 @@ class OutOfPlaceAdder(Bloq):
 
 
 @frozen
+class OutOfPlaceAdderBuildingBlockExplicit(Bloq):
+    r"""A 3-bit addition gate.
+
+    Implements $U|a\rangle|b\rangle|c\rangle \rightarrow |a\rangle|b\rangle|(a+b+c)_{0}\rangle|(a+b+c)_{1}\rangle$
+    using one Toffoli gate. The output bits store the sum (in binary) of $a,b,c$.  $(a+b+c)_{0}$ corresponds
+    to the $2^{0}$ bit and $(a+b+c)_{1}$ corresponds to the $2^{1}$ bit.
+
+    Registers:
+     - a: A single-bit-sized input register (register a above).
+     - b: A single-bit-sized input register (register b above).
+     - c: A single-bit-sized input register (register c above).
+     - result: four bits the last two of which represent the
+               sum of the input in binary.
+
+    References:
+        [Halving the cost of quantum addition](https://arxiv.org/abs/1709.06648)
+    """
+    adjoint: bool = False
+
+    @property
+    def signature(self):
+        return Signature(
+            [
+                Register(name='a', bitsize=1, side=Side.THRU),
+                Register(name='b', bitsize=1, side=Side.THRU),
+                Register(name='c', bitsize=1, side=Side.THRU),
+                Register(name='co', bitsize=1, side=Side.THRU),
+            ]
+        )
+
+    def short_name(self) -> str:
+        dag = '†' if self.adjoint else ''
+        return f"(a + b + c){dag}"
+
+    def t_complexity(self):
+        if self.adjoint:
+            return TComplexity(t=0, clifford=7)
+        return TComplexity(t=4, clifford=5)
+
+    def build_composite_bloq(self, bb: BloqBuilder, *, a, b, c, co=None):
+        if self.adjoint:
+            b, c = bb.add(CNOT(), ctrl=b, target=c)
+            a, co = bb.add(CNOT(), ctrl=a, target=co)
+            a, b = bb.add(CNOT(), ctrl=a, target=b)
+            (b, c) = bb.add(And(adjoint=True), ctrl=[b, c], target=co)
+            a, c = bb.add(CNOT(), ctrl=a, target=c)
+            a, b = bb.add(CNOT(), ctrl=a, target=b)
+            return {'a': a, 'b': b, 'c': c}
+
+        a, b = bb.add(CNOT(), ctrl=a, target=b)
+        a, c = bb.add(CNOT(), ctrl=a, target=c)
+        (b, c), co = bb.add(And(), ctrl=[b, c])
+        a, b = bb.add(CNOT(), ctrl=a, target=b)
+        a, co = bb.add(CNOT(), ctrl=a, target=co)
+        b, c = bb.add(CNOT(), ctrl=b, target=c)
+        return {'a': a, 'b': b, 'c': c, 'co': co}
+
+
+@frozen
 class OutOfPlaceAdderBuildingBlock(Bloq):
     r"""A 3-bit addition gate.
 
